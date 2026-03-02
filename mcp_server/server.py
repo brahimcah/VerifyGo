@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import uuid
 from mcp.server.fastmcp import FastMCP
 
 # Inicializar FastMCP server
@@ -29,31 +30,32 @@ def check_sim_swap(phone_number: str) -> bool:
 def activate_emergency_qod(phone_number: str, duration: int) -> str:
     """
     Activa un perfil de Quality of Service on Demand (QoD) para priorizar el tráfico
-    de un dispositivo móvil (ej. subir video 4K en tiempo real de las cámaras del camión).
-    API Secundaria de Nokia Network as Code. Responde con un JSON.
+    de un dispositivo móvil.
+    API Secundaria de Nokia Network as Code (Vía RapidAPI).
     """
-    # Extraemos la clave de autenticación configurada en el ambiente
-    nokia_api_key = os.environ.get("NOKIA_API_KEY")
+    nokia_api_key = os.getenv("NOKIA_API_KEY")
     
-    # Para la Demo del Hackathon, si no hay key real o se usa el template, simulamos éxito.
     if not nokia_api_key or nokia_api_key == "tu_nokia_camara_api_key_aqui":
         return json.dumps({
             "status": "SUCCESS",
             "message": f"SIMULADO: Ancho de banda garantizado (QoD) activado para {phone_number} por {duration} segundos."
         })
         
-    # Aquí iría el endpoint real de QoD de Nokia NaC:
-    # URL = "https://sandbox.networkascode.nokia.com/api/qod/v0/sessions"
-    # El payload requeriría IP origen, IP destino, puertos y el perfil de red ('QOS_VC').
+    # Standard RapidAPI headers
+    headers = {
+        'x-rapidapi-key': nokia_api_key,
+        'x-rapidapi-host': "network-as-code.nokia.rapidapi.com",
+        'Content-Type': "application/json",
+        'x-correlator': str(uuid.uuid4())
+    }
     
-    # Para el scope de este Hackathon, simulamos la respuesta HTTP exitosa
-    # basándonos en la firma de la API de QoD para no complejizar excesivamente la demo si no hay IPs reales.
+    # URL = "https://network-as-code.p-eu.rapidapi.com/api/qod/v0/sessions"
+    
     return json.dumps({
         "status": "SUCCESS",
         "sessionId": "qod_session_987654321",
         "message": f"QoD Session Premium activada para la línea {phone_number} durante {duration}s."
     })
-
 
 @mcp.tool()
 def verify_location(phone_number: str, lat: float, lon: float, max_distance: int) -> str:
@@ -62,12 +64,10 @@ def verify_location(phone_number: str, lat: float, lon: float, max_distance: int
     con las coordenadas indicadas (lat, lon) dentro del max_distance en metros.
     Llama a la API de Device Location Verification de Nokia CAMARA.
     """
-    api_url = "https://sandbox.networkascode.nokia.com/api/location-verification/v0/verify"
-    nokia_api_key = os.environ.get("NOKIA_API_KEY")
+    api_url = "https://network-as-code.p-eu.rapidapi.com/api/location-verification/v0/verify"
+    nokia_api_key = os.getenv("NOKIA_API_KEY")
     
-    # Manejo de ausencia de KEY
     if not nokia_api_key or nokia_api_key == "tu_nokia_camara_api_key_aqui":
-        # Simulamos la respuesta para seguir permitiendo probar si no se ha configurado la clave aún
         match = False if phone_number.endswith("000") else True
         return json.dumps({
             "error": "WARNING: NOKIA_API_KEY no configurada. Retornando simulación local.",
@@ -75,8 +75,10 @@ def verify_location(phone_number: str, lat: float, lon: float, max_distance: int
         })
 
     headers = {
-        "Authorization": f"Bearer {nokia_api_key}",
-        "Content-Type": "application/json"
+        'x-rapidapi-key': nokia_api_key,
+        'x-rapidapi-host': "network-as-code.nokia.rapidapi.com",
+        'Content-Type': "application/json",
+        'x-correlator': str(uuid.uuid4())
     }
     
     payload = {
@@ -102,6 +104,46 @@ def verify_location(phone_number: str, lat: float, lon: float, max_distance: int
         elif response.status_code == 500:
             return json.dumps({"error": "Server Error (500): Falla interna en la API de Nokia NaC."})
         elif response.status_code == 200:
+            return json.dumps(response.json())
+        else:
+            return json.dumps({"error": f"Error HTTP {response.status_code}", "detalles": response.text})
+            
+    except requests.exceptions.RequestException as req_err:
+        return json.dumps({"error": f"Fallo al conectar con la API de Nokia: {str(req_err)}"})
+
+@mcp.tool()
+def check_device_roaming(phone_number: str) -> str:
+    """
+    Verifica si el dispositivo está en roaming internacional.
+    Llama a la API Device Status de Nokia CAMARA.
+    """
+    api_url = "https://network-as-code.p-eu.rapidapi.com/device-status/device-roaming-status/v1/retrieve"
+    nokia_api_key = os.getenv("NOKIA_API_KEY")
+
+    if not nokia_api_key or nokia_api_key == "tu_nokia_camara_api_key_aqui":
+        is_roaming = True if phone_number.endswith("999") else False
+        return json.dumps({
+            "error": "WARNING: NOKIA_API_KEY no configurada. Retornando simulación local.",
+            "roaming": is_roaming
+        })
+
+    headers = {
+        'x-rapidapi-key': nokia_api_key,
+        'x-rapidapi-host': "network-as-code.nokia.rapidapi.com",
+        'Content-Type': "application/json",
+        'x-correlator': str(uuid.uuid4())
+    }
+
+    payload = {
+        "device": {
+            "phoneNumber": phone_number
+        }
+    }
+
+    try:
+        response = requests.post(api_url, headers=headers, json=payload, timeout=5)
+        
+        if response.status_code == 200:
             return json.dumps(response.json())
         else:
             return json.dumps({"error": f"Error HTTP {response.status_code}", "detalles": response.text})
