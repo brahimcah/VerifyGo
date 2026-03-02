@@ -152,11 +152,13 @@ async def run_start_journey_evaluation(truck_id, phone_number, lat_inicio, lon_i
                         "lon": float(lon_inicio),
                         "max_distance": 500
                     })
+                    res_roam = await session.call_tool("check_device_roaming", {"phone_number": phone_number})
 
                     nv_result = res_nv.content[0].text
                     ss_result = res_ss.content[0].text
                     loc_result = res_loc.content[0].text
                     chip_result = res_chip.content[0].text
+                    roam_result = res_roam.content[0].text
                 except Exception as mcp_err:
                     logger.error(f"Error executing MCP tools: {mcp_err}")
                     return {
@@ -164,14 +166,15 @@ async def run_start_journey_evaluation(truck_id, phone_number, lat_inicio, lon_i
                         "reason": f"Error de comunicación con el servidor MCP: {mcp_err}"
                     }
                 
-                logger.info(f"MCP NV: {nv_result}, SS: {ss_result}, LOC: {loc_result}, CHIP: {chip_result}")
+                logger.info(f"MCP NV: {nv_result}, SS: {ss_result}, LOC: {loc_result}, CHIP: {chip_result}, ROAM: {roam_result}")
 
                 system_prompt = """Eres FleetSync AI, un sistema experto en ciberseguridad logística. Tu objetivo es autorizar o denegar el inicio de una ruta (Flow 1).
 Reglas de decisión basadas en las herramientas Telco e IoT:
 - Si TODAS las verificaciones son correctas (no hay SIM Swap, la ubicación del celular coincide y la del chip del camión coincide) -> STATUS: AUTHORIZED.
 - Si hay un cambio de SIM (SIM Swap es true) -> STATUS: DENIED indicando riesgo de secuestro de comunicaciones.
 - Si la verificación de ubicación de red (verify_location) es false -> STATUS: DENIED indicando posible inhibición GPS del móvil.
-- Si la verificación del chip del camión (verify_truck_chip_location) es false -> STATUS: DENIED indicando posible spoofing del camión."""
+- Si la verificación del chip del camión (verify_truck_chip_location) es false -> STATUS: DENIED indicando posible spoofing del camión.
+- Si el dispositivo está en ROAMING internacional pero la ruta es nacional, el status debe ser DENIED por riesgo de SIM clonada en el extranjero."""
                 
                 prompt = f"""
                 Evalúa la solicitud de inicio de ruta del camión {truck_id} a lo largo de la ruta {route}.
@@ -184,6 +187,7 @@ Reglas de decisión basadas en las herramientas Telco e IoT:
                 - check_sim_swap: {ss_result}
                 - verify_location (radio 500m): {loc_result}
                 - verify_truck_chip_location (radio 500m): {chip_result}
+                - check_device_roaming: {roam_result}
                 
                 Devuelve un JSON estrictamente con el siguiente formato:
                 {{"status": "AUTHORIZED" o "DENIED", "reason": "Tu razonamiento técnico de máximo 3 frases."}}
@@ -203,7 +207,8 @@ Reglas de decisión basadas en las herramientas Telco e IoT:
                     result_json = json.loads(response.text)
                     result_json["network_logs"] = {
                         "verify_location": loc_result,
-                        "verify_truck_chip_location": chip_result
+                        "verify_truck_chip_location": chip_result,
+                        "check_device_roaming": roam_result
                     }
                         
                     return result_json
@@ -216,6 +221,9 @@ Reglas de decisión basadas en las herramientas Telco e IoT:
                     if "true" in str(ss_result).lower() or "sim swap" in str(ss_result).lower():
                         status = "DENIED"
                         reason = "ALERTA: SIM Swap detectado recientemente."
+                    elif "true" in str(roam_result).lower() or "roaming" in str(roam_result).lower():
+                        status = "DENIED"
+                        reason = "ALERTA: Dispositivo en roaming internacional."
                     elif "false" in str(loc_result).lower() or "false" in str(chip_result).lower():
                         status = "DENIED"
                         reason = "ALERTA: Discrepancia GPS detectada al iniciar ruta."
@@ -225,7 +233,8 @@ Reglas de decisión basadas en las herramientas Telco e IoT:
                         "reason": reason,
                         "network_logs": {
                             "verify_location": loc_result,
-                            "verify_truck_chip_location": chip_result
+                            "verify_truck_chip_location": chip_result,
+                            "check_device_roaming": roam_result
                         }
                     }
     except Exception as connection_err:

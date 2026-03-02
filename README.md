@@ -72,7 +72,19 @@ Este comando orquestador se encarga de:
 
 ### Simulación Rápida (CLI)
 
-Si deseas probar el razonamiento en consola (Escenarios de Normalidad y Ataque):
+Si deseas probar el razonamiento básico en consola (Escenarios de Normalidad y Ataque):
 ```bash
 python simulador.py
 ```
+
+### Simulador Coreográfico (Para el Pitch al Jurado)
+
+Durante los 5 minutos del pitch, utiliza el script orquestador CLI interactivo, diseñado específicamente para inyectar automáticamente los datos paso a paso mientras explicas la arquitectura.
+```bash
+python demo_runner.py
+```
+
+Al iniciarlo, verás el siguiente menú de escenarios simulados en vivo (donde la IA y el entorno evaluan cada fase temporal con retrasos `sleep` programados de 2 segundos para dar dramatismo a las consolas):
+1. **[1] Ejecutar Escenario: Viaje Perfecto (Todo OK):** Autorización nacional, comprobación QoD y llegada final conformada al destino logístico.
+2. **[2] Ejecutar Escenario: Ataque Spoofing (Conductor no está en el camión):** Simulación de un inhibidor físico GPS en el vehículo o robo mediante sustracción del trailer; detectado instantes después por Location Verification vía la API de Nokia y negado el inicio de ruta.
+3. **[3] Ejecutar Escenario: Desvío de Ruta (Incidencia en vivo):** Simulación del desvío en una zona muerta de GPS disparando el protocolo de emergencia QoD streaming.
