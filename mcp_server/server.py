@@ -114,30 +114,6 @@ def verify_location(phone_number: str, lat: float, lon: float, max_distance: int
     except requests.exceptions.RequestException as req_err:
         return json.dumps({"error": f"Fallo al conectar con la API de Nokia: {str(req_err)}"})
 
-if __name__ == "__main__":
-    mcp.run()
-    """
-    Activa un perfil de Quality of Service on Demand (QoD) para priorizar el tráfico
-    de un dispositivo móvil (ej. subir video 4K en tiempo real de las cámaras del camión).
-    API Secundaria de Nokia Network as Code. Responde con un JSON.
-    """
-    nokia_api_key = os.environ.get("NOKIA_API_KEY")
-    # Para la Demo del Hackathon, si no hay key, simulamos éxito.
-    if not nokia_api_key or nokia_api_key == "tu_nokia_camara_api_key_aqui":
-        return json.dumps({
-            "status": "SUCCESS",
-            "message": f"SIMULADO: Ancho de banda garantizado (QoD) activado para {phone_number} por {duration} segundos."
-        })
-        
-    # Aquí iría el endpoint real de QoD de Nokia NaC
-    # Para el scope de este Hackathon, simulamos la respuesta HTTP exitosa
-    # basándonos en la firma de la API de QoD.
-    return json.dumps({
-        "status": "SUCCESS",
-        "sessionId": "qod_session_987654321",
-        "message": f"QoD Session Premium activada para la línea {phone_number} durante {duration}s."
-    })
-
 @mcp.tool()
 def verify_location(phone_number: str, lat: float, lon: float, max_distance: int) -> str:
     """
