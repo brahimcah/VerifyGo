@@ -3,3 +3,5 @@ streamlit
 google-genai
 python-dotenv
 requests
+import pandas as pd
+numpy

@@ -3,14 +3,38 @@ import sys
 import os
 import json
 import time
+import pandas as pd
+import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.ai_agent import evaluate_truck_status
 
 st.set_page_config(layout='wide', page_title='FleetSync Command Center')
 
-st.title("🚛 FleetSync Command Center")
+st.title("🚛 FleetSync Command Center & Business Dashboard")
 st.markdown("Monitor de Seguridad Anti-Robo de Flotas soportado por Nokia CAMARA APIs y Google Gemini.")
+
+st.markdown("---")
+st.subheader("📊 Relevancia de Negocio y ROI (Impacto Financiero)")
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.metric(label="Valor de la Carga Protegida", value="€2.5M", delta="Alta Prioridad")
+with m2:
+    st.metric(label="Costo Operativo API", value="€0.02 / llamada", delta="-99% vs Escolta", delta_color="inverse")
+with m3:
+    st.metric(label="Ahorro Estimado Póliza Seguro", value="-15% Anual", delta="€150k Ahorro/año")
+
+# Gráfico Dummy de ROI / Reducción de incidentes
+chart_data = pd.DataFrame(
+    {
+        "Hardware GPS Tradicional": [12, 14, 15, 13, 16],
+        "FleetSync AI (Nokia NaC)": [12, 6, 2, 1, 0]
+    },
+    index=["Q1", "Q2", "Q3", "Q4", "Q1 (Año Sig)"]
+)
+st.line_chart(chart_data, color=["#FF4B4B", "#00FF00"])
+
+st.markdown("---")
 
 col1, col2 = st.columns([1, 1])
 

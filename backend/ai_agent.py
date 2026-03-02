@@ -54,6 +54,7 @@ async def run_mcp_evaluation(truck_id, phone_number, reported_lat, reported_lon)
 Reglas de decisión:
 - Si la red confirma que el móvil está en esas coordenadas -> STATUS: SECURE.
 - Si la red dice que NO coinciden -> STATUS: ALERT. Esto significa que el hardware GPS del camión está siendo inhibido o falseado.
+- Si el STATUS es ALERT (robo detectado), DEBES ejecutar inmediatamente la herramienta activate_emergency_qod para priorizar el ancho de banda del camión y permitir la transmisión de las cámaras de seguridad en 4K hacia la central.
 - NUNCA asumas que el camión está seguro sin usar la herramienta de red."""
             
             prompt = f"""
@@ -88,6 +89,13 @@ Reglas de decisión:
                 result_json["network_logs"] = {
                     "verify_location": loc_result
                 }
+                
+                # Segunda API: si es un alert, llamamos al QoD
+                if result_json.get("status") == "ALERT":
+                    logger.info("Executing Emergency QoD API for video streaming...")
+                    res_qod = await session.call_tool("activate_emergency_qod", {"phone_number": phone_number, "duration": 3600})
+                    result_json["network_logs"]["qod_activation"] = res_qod.content[0].text
+                    
                 return result_json
                 
             except Exception as e:
