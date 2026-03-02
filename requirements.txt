@@ -11,8 +11,9 @@ python-dotenv>=1.0.0
 # ── HTTP (llamadas REST Nokia NaC directas desde mcp_server) ────────────────
 requests>=2.31.0
 
-# ── Frontend Streamlit ───────────────────────────────────────────────────────
-streamlit>=1.40.0
+# ── Backend API REST (sirve al frontend React) ───────────────────────────────
+flask>=3.0.0
+flask-cors>=4.0.0
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 pytest>=8.0.0
