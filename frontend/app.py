@@ -100,3 +100,39 @@ with col2:
     else:
         st.info("👈 Configura los parámetros en el panel izquierdo y pulsa 'Evaluar Seguridad con IA'.")
 
+st.markdown("---")
+st.header("🏁 Confirmar Llegada (Flujo 4)")
+st.markdown("Verifica la autenticidad de la llegada del camión a su destino cruzando GPS e IoT.")
+
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    arr_truck_id = st.text_input("ID del Camión (Llegada)", value="TRK-900", key="arr_truck_id")
+with c2:
+    arr_phone = st.text_input("Teléfono", value="+34600123456", key="arr_phone")
+with c3:
+    arr_lat = st.number_input("Latitud Llegada", value=40.4168, format="%.5f", key="arr_lat")
+with c4:
+    arr_lon = st.number_input("Longitud Llegada", value=-3.7038, format="%.5f", key="arr_lon")
+
+if st.button("✅ Confirmar Llegada", type="primary"):
+    with st.spinner("Verificando credenciales de destino con MCP y Gemini..."):
+        from backend.ai_agent import confirm_arrival
+        try:
+            arr_res = confirm_arrival(arr_truck_id, arr_phone, arr_lat, arr_lon)
+            st.subheader("🤖 Decisión de Llegada")
+            arr_status = arr_res.get("status", "UNKNOWN")
+            arr_reason = arr_res.get("reason", "Sin razón")
+            
+            if arr_status == "ARRIVED":
+                st.success(f"✅ **LLEGADA CONFIRMADA**\n\n{arr_reason}")
+            elif arr_status == "NOT_ARRIVED":
+                st.info(f"ℹ️ **AÚN EN RUTA (DISTANCIA ALTA)**\n\n{arr_reason}")
+            elif arr_status == "ALERT":
+                st.error(f"🚨 **ALERTA: DISCREPANCIA DE COORDENADAS EN DESTINO**\n\n{arr_reason}")
+                
+            with st.expander("Ver JSON de Respuesta de Llegada"):
+                st.json(arr_res)
+        except Exception as e:
+            st.error(f"Error confirmando llegada: {str(e)}")
+
+
