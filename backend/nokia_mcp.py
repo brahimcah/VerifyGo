@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,9 +17,9 @@ def _nokia_nac_headers():
 @asynccontextmanager
 async def nokia_nac_session():
     """
-    Abre una sesión MCP con Nokia Network as Code via SSE (RapidAPI).
-    Conecta directamente al servidor MCP de Nokia en la nube,
-    sin necesidad de levantar un servidor local.
+    Abre una sesión MCP con Nokia Network as Code via Streamable HTTP (RapidAPI).
+    El servidor Nokia usa JSON-RPC sobre HTTP (protocolo MCP v0.1.7+),
+    no SSE. Se conecta directamente al MCP de Nokia en la nube.
 
     Variables de entorno requeridas en .env:
         NOKIA_NAC_API_KEY  → tu RapidAPI key de Nokia NaC
@@ -27,7 +27,7 @@ async def nokia_nac_session():
         NOKIA_NAC_MCP_URL  → https://mcp-eu.rapidapi.com
     """
     url = os.environ["NOKIA_NAC_MCP_URL"]
-    async with sse_client(url=url, headers=_nokia_nac_headers()) as (read, write):
+    async with streamablehttp_client(url=url, headers=_nokia_nac_headers()) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             yield session
