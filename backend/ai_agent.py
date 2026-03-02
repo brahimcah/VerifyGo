@@ -123,203 +123,175 @@ Reglas de decisión:
             "reason": f"Error crítico al intentar levantar o conectar con el servidor local MCP: {connection_err}"
         }
 
-async def run_start_journey_evaluation(truck_id, phone_number, lat_inicio, lon_inicio, route):
-    server_params = StdioServerParameters(
-        command="python",
-        args=["mcp_server/server.py"],
-        env=os.environ.copy()
-    )
+from backend.nokia_mcp import nokia_nac_session
+from backend.gemini_agent import evaluate
 
+async def run_journey_start(truck_id, phone_number, lat_inicio, lon_inicio, route):
     try:
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                
-                logger.info("Calling MCP tools for start_journey...")
-                
-                try:
-                    res_nv = await session.call_tool("check_number_verification", {"phone_number": phone_number})
-                    res_ss = await session.call_tool("check_sim_swap", {"phone_number": phone_number})
-                    res_loc = await session.call_tool("verify_location", {
-                        "phone_number": phone_number, 
-                        "lat": float(lat_inicio), 
-                        "lon": float(lon_inicio), 
-                        "max_distance": 500
-                    })
-                    res_chip = await session.call_tool("verify_truck_chip_location", {
-                        "truck_id": truck_id,
-                        "lat": float(lat_inicio),
-                        "lon": float(lon_inicio),
-                        "max_distance": 500
-                    })
-                    res_roam = await session.call_tool("check_device_roaming", {"phone_number": phone_number})
+        async with nokia_nac_session() as session:
+            logger.info("Calling MCP tools asynchronously for start_journey...")
+            
+            # Simulated backend resolution for truck chip MSISDN
+            truck_sim_number = "+34600123000" if truck_id.endswith("000") else "+34600999111"
+            
+            t_nv = session.call_tool("check_number_verification", {"phone_number": phone_number})
+            t_ss = session.call_tool("check_sim_swap", {"phone_number": phone_number})
+            t_loc_driver = session.call_tool("verify_location", {
+                "phone_number": phone_number, "lat": float(lat_inicio), "lon": float(lon_inicio), "max_distance": 500
+            })
+            t_loc_truck = session.call_tool("verify_truck_chip_location", {
+                "truck_id": truck_id, "lat": float(lat_inicio), "lon": float(lon_inicio), "max_distance": 500
+            })
 
-                    nv_result = res_nv.content[0].text
-                    ss_result = res_ss.content[0].text
-                    loc_result = res_loc.content[0].text
-                    chip_result = res_chip.content[0].text
-                    roam_result = res_roam.content[0].text
-                except Exception as mcp_err:
-                    logger.error(f"Error executing MCP tools: {mcp_err}")
-                    return {
-                        "status": "DENIED",
-                        "reason": f"Error de comunicación con el servidor MCP: {mcp_err}"
-                    }
+            try:
+                res_nv, res_ss, res_loc, res_chip = await asyncio.gather(t_nv, t_ss, t_loc_driver, t_loc_truck)
                 
-                logger.info(f"MCP NV: {nv_result}, SS: {ss_result}, LOC: {loc_result}, CHIP: {chip_result}, ROAM: {roam_result}")
+                nv_raw = res_nv.content[0].text
+                ss_raw = res_ss.content[0].text
+                loc_raw = res_loc.content[0].text
+                chip_raw = res_chip.content[0].text
+            except Exception as mcp_err:
+                logger.error(f"Error executing MCP tools concurrently: {mcp_err}")
+                return {
+                    "status": "DENIED",
+                    "reason": f"Error communication with MCP server: {mcp_err}",
+                    "checks": {
+                        "number_valid": False, "sim_safe": False,
+                        "driver_location_ok": False, "truck_location_ok": False
+                    }
+                }
+            
+            mcp_raw_data = {
+                "check_number_verification": nv_raw,
+                "check_sim_swap": ss_raw,
+                "verify_location": loc_raw,
+                "verify_truck_chip_location": chip_raw
+            }
+            logger.info(f"MCP Concurrent Results: {mcp_raw_data}")
 
-                system_prompt = """Eres FleetSync AI, un sistema experto en ciberseguridad logística. Tu objetivo es autorizar o denegar el inicio de una ruta (Flow 1).
-Reglas de decisión basadas en las herramientas Telco e IoT:
-- Si TODAS las verificaciones son correctas (no hay SIM Swap, la ubicación del celular coincide y la del chip del camión coincide) -> STATUS: AUTHORIZED.
-- Si hay un cambio de SIM (SIM Swap es true) -> STATUS: DENIED indicando riesgo de secuestro de comunicaciones.
-- Si la verificación de ubicación de red (verify_location) es false -> STATUS: DENIED indicando posible inhibición GPS del móvil.
-- Si la verificación del chip del camión (verify_truck_chip_location) es false -> STATUS: DENIED indicando posible spoofing del camión.
-- Si el dispositivo está en ROAMING internacional pero la ruta es nacional, el status debe ser DENIED por riesgo de SIM clonada en el extranjero."""
+            system_prompt = """Eres FleetSync AI. Autoriza o deniega el inicio del viaje según los resultados de seguridad evaluados.
+Reglas estrictas de decisión aplicables en este orden:
+1. Si check_sim_swap == true -> status: "DENIED", reason: "SIM_SWAP".
+2. Si check_number_verification falla -> status: "DENIED", reason: "INVALID_NUMBER".
+3. Si la verificación de ubicación del conductor (verify_location) resulta en false -> status: "DENIED", reason: "DRIVER_NOT_AT_START".
+4. Si la verificación del camión (verify_truck_chip_location) resulta en false -> status: "DENIED", reason: "TRUCK_NOT_AT_START".
+5. Si y solo si todas las comprobaciones son correctas (todo OK, sin errores, sin swaps y ubicaciones matching) -> status: "AUTHORIZED", reason: "ALL_CHECKS_PASSED"
+
+Devuelve UNICAMENTE un objeto JSON usando el siguiente schema estricto:
+{"status": "AUTHORIZED" o "DENIED", "reason": "La razón de arriba asignada", "checks": {"number_valid": boolean, "sim_safe": boolean, "driver_location_ok": boolean, "truck_location_ok": boolean}}"""
+            
+            prompt = f"Evalúa la solicitud de inicio para el camión {truck_id}.\nResultados en crudo de la red MCP:\n{json.dumps(mcp_raw_data)}"
+            
+            try:
+                result_json = await evaluate(prompt, system_prompt)
                 
-                prompt = f"""
-                Evalúa la solicitud de inicio de ruta del camión {truck_id} a lo largo de la ruta {route}.
-                Datos solicitados:
-                - Teléfono del conductor: {phone_number}
-                - GPS Inicio (Lat, Lon): {lat_inicio}, {lon_inicio}
-                
-                Resultados obtenidos de MCP (Telco + IoT):
-                - check_number_verification: {nv_result}
-                - check_sim_swap: {ss_result}
-                - verify_location (radio 500m): {loc_result}
-                - verify_truck_chip_location (radio 500m): {chip_result}
-                - check_device_roaming: {roam_result}
-                
-                Devuelve un JSON estrictamente con el siguiente formato:
-                {{"status": "AUTHORIZED" o "DENIED", "reason": "Tu razonamiento técnico de máximo 3 frases."}}
-                """
-                
-                try:
-                    client = genai.Client()
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            system_instruction=system_prompt,
-                            response_mime_type="application/json",
-                        ),
-                    )
-                    
-                    result_json = json.loads(response.text)
-                    result_json["network_logs"] = {
-                        "verify_location": loc_result,
-                        "verify_truck_chip_location": chip_result,
-                        "check_device_roaming": roam_result
-                    }
+                if result_json.get("status") == "AUTHORIZED":
+                    import sys
+                    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
+                    try:
+                        import route_monitor
+                        destination = route[-1] if route else None
                         
-                    return result_json
-                    
-                except Exception as e:
-                    logger.error(f"Error calling Gemini AI: {e}. Returning fallback analysis.")
-                    status = "AUTHORIZED"
-                    reason = "Evaluación de seguridad superada correctamente."
-                    
-                    if "true" in str(ss_result).lower() or "sim swap" in str(ss_result).lower():
-                        status = "DENIED"
-                        reason = "ALERTA: SIM Swap detectado recientemente."
-                    elif "true" in str(roam_result).lower() or "roaming" in str(roam_result).lower():
-                        status = "DENIED"
-                        reason = "ALERTA: Dispositivo en roaming internacional."
-                    elif "false" in str(loc_result).lower() or "false" in str(chip_result).lower():
-                        status = "DENIED"
-                        reason = "ALERTA: Discrepancia GPS detectada al iniciar ruta."
-                    
-                    return {
-                        "status": status,
-                        "reason": reason,
-                        "network_logs": {
-                            "verify_location": loc_result,
-                            "verify_truck_chip_location": chip_result,
-                            "check_device_roaming": roam_result
+                        route_monitor.active_journeys[truck_id] = {
+                            "phone_number": phone_number,
+                            "route_waypoints": json.dumps(route),
+                            "destination": destination,
+                            "status": "ACTIVE",
+                            "current_lat": lat_inicio,
+                            "current_lon": lon_inicio
                         }
+                    except Exception as e:
+                        logger.error(f"Error adding to memory: {e}")
+                        
+                    logger.info("Disparar Flujo 2")
+                    logger.info("Arrancar Flujo 3")
+
+                return result_json
+            except Exception as e:
+                logger.error(f"Fallback AI error: {e}")
+                return {
+                    "status": "DENIED",
+                    "reason": "FALLBACK_EVALUATION_FAILED",
+                    "checks": {
+                        "number_valid": False, "sim_safe": False,
+                        "driver_location_ok": False, "truck_location_ok": False
                     }
+                }
+
     except Exception as connection_err:
-        logger.error(f"Error de conexión global con el proceso MCP: {connection_err}")
+        logger.error(f"MCP Global Err: {connection_err}")
         return {
             "status": "DENIED",
-            "reason": f"Error crítico al conectar: {connection_err}"
+            "reason": f"CRITICAL_CONNECTION_ERROR: {connection_err}",
+            "checks": {
+                "number_valid": False, "sim_safe": False,
+                "driver_location_ok": False, "truck_location_ok": False
+            }
         }
 
-async def run_activate_journey_qod_evaluation(truck_id, phone_number, lat_inicio, lon_inicio, lat_destino, lon_destino):
-    server_params = StdioServerParameters(
-        command="python",
-        args=["mcp_server/server.py"],
-        env=os.environ.copy()
-    )
-
+async def run_qod_activation(truck_id, phone_number, lat1, lon1, lat2, lon2):
     try:
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
+        async with nokia_nac_session() as session:
+            logger.info("Calling MCP calculate_distance tool for QoD...")
+            res_dist = await session.call_tool("calculate_distance", {
+                "lat1": float(lat1), 
+                "lon1": float(lon1),
+                "lat2": float(lat2),
+                "lon2": float(lon2)
+            })
+            
+            dist_result = json.loads(res_dist.content[0].text)
+            distance_km = float(dist_result.get("distance_km", 0.0))
+            
+            if distance_km > 50:
+                duration = 7200
+            elif distance_km > 20:
+                duration = 3600
+            else:
+                duration = 0
                 
-                logger.info("Calling MCP calculate_distance tool for QoD evaluation...")
-                
-                try:
-                    res_dist = await session.call_tool("calculate_distance", {
-                        "lat1": float(lat_inicio), 
-                        "lon1": float(lon_inicio),
-                        "lat2": float(lat_destino),
-                        "lon2": float(lon_destino)
-                    })
-                    
-                    dist_result = json.loads(res_dist.content[0].text)
-                    distance_km = dist_result.get("distance_km", 0)
-                    
-                    logger.info(f"Calculated distance: {distance_km} km")
-                    
-                    system_prompt = """Eres FleetSync AI. Tu objetivo es decidir la duración del perfil QoD (Quality of Service on Demand) para una ruta.
-Reglas estrictas basadas en la distancia proporcionada:
-- Si la distancia es mayor a 50 km -> decide duración de 7200s (2 horas) y devuelve STATUS: QOD_ACTIVATED.
-- Si la distancia es mayor a 20 km y menor o igual a 50 km -> decide duración de 3600s (1 hora) y devuelve STATUS: QOD_ACTIVATED.
-- Si la distancia es menor o igual a 20 km -> devuelve STATUS: QOD_NOT_REQUIRED."""
-                    
-                    prompt = f"""
-                    Evalúa la necesidad de QoD para el viaje del camión {truck_id}.
-                    Distancia calculada: {distance_km} km.
-                    
-                    Devuelve un JSON estrictamente con el siguiente formato:
-                    {{"status": "QOD_ACTIVATED" o "QOD_NOT_REQUIRED", "duration": int (segundos, 0 si no se requiere), "reason": "Breve explicación."}}
-                    """
-                    
-                    client = genai.Client()
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            system_instruction=system_prompt,
-                            response_mime_type="application/json",
-                        ),
-                    )
-                    
-                    result_json = json.loads(response.text)
-                    result_json["network_logs"] = {
-                        "calculate_distance": dist_result
-                    }
-                    
-                    if result_json.get("status") == "QOD_ACTIVATED":
-                        duration = result_json.get("duration", 3600)
-                        logger.info(f"Executing QoD API for journey duration: {duration}s...")
-                        res_qod = await session.call_tool("activate_emergency_qod", {"phone_number": phone_number, "duration": duration})
-                        result_json["network_logs"]["qod_activation"] = res_qod.content[0].text
-                        
-                    return result_json
-                    
-                except Exception as eval_err:
-                    logger.error(f"Error during QoD evaluation: {eval_err}")
-                    return {
-                        "status": "ERROR",
-                        "reason": f"Fallo al evaluar QoD: {eval_err}"
-                    }
+            qod_activation_res = "Not required"
+            
+            if duration > 0:
+                logger.info(f"Calling activate_emergency_qod with duration {duration} for {phone_number}")
+                res_qod = await session.call_tool("activate_emergency_qod", {
+                    "phone_number": phone_number,
+                    "duration": duration
+                })
+                qod_activation_res = res_qod.content[0].text
+
+            system_prompt = (
+                "Eres FleetSync AI. Resume la activación de QoD. "
+                "Responde estrictamente en JSON con la estructura "
+                '{"status": "QOD_ACTIVATED o QOD_NOT_REQUIRED", "distance_km": "Float", "qod_duration_seconds": "Integer", "reason": "String"}. '
+                "El status debe ser QOD_ACTIVATED o QOD_NOT_REQUIRED."
+            )
+            
+            prompt = (
+                f"Distancia calculada: {distance_km} km. "
+                f"Segundos de QoD activados: {duration}. "
+                f"Respuesta del MCP: {qod_activation_res}"
+            )
+            
+            result_json = await evaluate(prompt, system_prompt)
+            
+            # Ensure safe fallback logic
+            if "status" not in result_json:
+                result_json["status"] = "QOD_ACTIVATED" if duration > 0 else "QOD_NOT_REQUIRED"
+                result_json["reason"] = "Processed via fallback evaluation"
+            
+            result_json["distance_km"] = distance_km
+            result_json["qod_duration_seconds"] = duration
+            
+            return result_json
 
     except Exception as connection_err:
-        logger.error(f"Error de conexión global con el proceso MCP: {connection_err}")
+        logger.error(f"Error calling MCP for QoD: {connection_err}")
         return {
-            "status": "ERROR",
-            "reason": f"Error crítico al conectar: {connection_err}"
+            "status": "QOD_NOT_REQUIRED",
+            "distance_km": 0.0,
+            "qod_duration_seconds": 0,
+            "reason": f"QOD_MCP_ERROR_FALLBACK: {str(connection_err)}"
         }
 
 def evaluate_truck_status(truck_id, phone_number, reported_lat, reported_lon):
@@ -332,13 +304,10 @@ def start_journey(truck_id, phone_number, lat_inicio, lon_inicio, route):
     """
     Función síncrona para autorizar el inicio de un viaje (Flujo 1).
     """
-    return asyncio.run(run_start_journey_evaluation(truck_id, phone_number, lat_inicio, lon_inicio, route))
+    return asyncio.run(run_journey_start(truck_id, phone_number, lat_inicio, lon_inicio, route))
 
 def activate_journey_qod(truck_id, phone_number, lat_inicio, lon_inicio, lat_destino, lon_destino):
-    """
-    Función síncrona para evaluar y activar QoD para un viaje (Flujo 2).
-    """
-    return asyncio.run(run_activate_journey_qod_evaluation(truck_id, phone_number, lat_inicio, lon_inicio, lat_destino, lon_destino))
+    return asyncio.run(run_qod_activation(truck_id, phone_number, lat_inicio, lon_inicio, lat_destino, lon_destino))
 
 async def run_confirm_arrival_evaluation(truck_id, phone_number, lat_actual, lon_actual):
     server_params = StdioServerParameters(
