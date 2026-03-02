@@ -1,0 +1,5 @@
+mcp
+streamlit
+google-genai
+python-dotenv
+requests
