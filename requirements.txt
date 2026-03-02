@@ -1,9 +1,23 @@
-mcp
-streamlit
-google-genai
-python-dotenv
-requests
-pandas
-numpy
+# ── MCP client (Nokia Network as Code via RapidAPI) ─────────────────────────
+# Incluye streamablehttp_client, ClientSession y FastMCP server
+mcp>=1.26.0
 
-protobuf
+# ── Google Gemini 2.5 Flash ──────────────────────────────────────────────────
+google-genai>=1.54.0
+
+# ── Variables de entorno (.env) ──────────────────────────────────────────────
+python-dotenv>=1.0.0
+
+# ── HTTP (llamadas REST Nokia NaC directas desde mcp_server) ────────────────
+requests>=2.31.0
+
+# ── Frontend Streamlit ───────────────────────────────────────────────────────
+streamlit>=1.40.0
+
+# ── Tests ────────────────────────────────────────────────────────────────────
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+
+# ── Utilidades de datos (frontend / análisis) ────────────────────────────────
+pandas>=2.0.0
+numpy>=1.26.0
