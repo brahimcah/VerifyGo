@@ -1,0 +1,5 @@
+{
+  "name": "Logistics Dashboard",
+  "description": "A logistics dashboard for managing deliveries, tracking agents, and monitoring network telemetry.",
+  "requestFramePermissions": []
+}
