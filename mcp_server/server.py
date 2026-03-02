@@ -61,8 +61,8 @@ def verify_location(phone_number: str, lat: float, lon: float, max_distance: int
     con las coordenadas indicadas (lat, lon) dentro del max_distance en metros.
     Llama a la API de Device Location Verification de Nokia CAMARA.
     """
-    # Endpoint principal de telecomunicaciones proporcionado por Nokia en su Sandbox
-    api_url = "https://sandbox.networkascode.nokia.com/api/location-verification/v0/verify"
+    # Endpoint principal de telecomunicaciones proporcionado por Nokia vía RapidAPI
+    api_url = "https://network-as-code.nokia.rapidapi.com/api/location-verification/v0/verify"
     nokia_api_key = os.environ.get("NOKIA_API_KEY")
     
     # Manejo de ausencia de KEY
@@ -74,10 +74,12 @@ def verify_location(phone_number: str, lat: float, lon: float, max_distance: int
             "verificationResult": match
         })
 
-    # Headers de autorización requeridos por la API de NaC
+    # Headers de autorización requeridos por la API de NaC en RapidAPI
     headers = {
-        "Authorization": f"Bearer {nokia_api_key}",
-        "Content-Type": "application/json"
+        'x-rapidapi-key': "7824879d1fmshb119c865abc4f6dp1e1091jsn523465580504",
+        'x-rapidapi-host': "network-as-code.nokia.rapidapi.com",
+        'Content-Type': "application/json",
+        'x-correlator': "b4333c46-49c0-4f62-80d7-f0ef930f1c46"
     }
     
     # Construcción minuciosa del body esperado por la API 'Location Verification'
