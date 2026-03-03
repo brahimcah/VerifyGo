@@ -1,205 +1,152 @@
-# VerifyGO 🚚🛡️
+<div align="center">
+  <h1>VerifyGO 🚚🛡️</h1>
+  <p><strong>Open Gateway Hackathon 2026 — Prueba de Concepto Funcional</strong></p>
 
-> **Open Gateway Hackathon 2026** — Prueba de Concepto (PoC) Funcional
+  [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
+  [![React Version](https://img.shields.io/badge/React-18%2B-61dafb.svg)](https://reactjs.org/)
+  [![Gemini 2.5 Flash](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-orange.svg)](https://deepmind.google/technologies/gemini/)
+  [![Nokia Network as Code](https://img.shields.io/badge/Telco-Nokia%20NaC-005aff.svg)](https://network.nokia.com/)
+</div>
 
-**VerifyGO** (anteriormente FleetSync AI) es un innovador sistema de seguridad en tiempo real diseñado para flotas de camiones. Combina la potencia de la red de telecomunicaciones de **Nokia (Network as Code)** con **Inteligencia Artificial Generativa (Gemini 2.5 Flash)** para verificar la identidad de los conductores, detectar anomalías de GPS (spoofing) y garantizar la integridad absoluta de las rutas y entregas.
+<br>
 
-El sistema resuelve un problema crítico en la logística moderna: los ciberdelincuentes pueden falsear las coordenadas GPS de un dispositivo, pero no pueden falsificar la triangulación celular de la red de telecomunicaciones. VerifyGO utiliza **Nokia Network as Code** para verificar directamente con las antenas de red si el dispositivo móvil del conductor se encuentra realmente donde el GPS indica.
+**VerifyGO** (anteriormente *FleetSync AI*) es un sistema avanzado de ciberseguridad y monitorización en tiempo real para flotas logísticas. Combina el poder inmutable de las redes de telecomunicaciones comerciales (**Nokia Network as Code**) con la capacidad analítica de la Inteligencia Artificial Generativa (**Gemini 2.5 Flash**) para validar de forma determinista la integridad de cada envío a nivel celular.
+
+## 🎯 El Problema y la Solución
+
+En logística moderna, **el posicionamiento GPS es vulnerable**. Los atacantes y clanes de robo de mercancía pueden realizar *spoofing* o inhibición de coordenadas con relativa facilidad. 
+
+**Nuestra solución:** Los delincuentes pueden engañar al receptor satelital del camión, pero **no pueden falsificar la red celular**. VerifyGO utiliza el protocolo internacional *Open Gateway* a través de Nokia NaC para consultar directamente contra las antenas de la operadora móvil la ubicación real y el estado criptográfico de la SIM de cada conductor, garantizando seguridad absoluta (Arquitectura "Zero-Trust" Logística).
 
 ---
 
-## 🌟 Características Principales
+## ✨ Características Principales
 
-- **Verificación de Ubicación Inmutable**: Contraste continuo de datos GPS del dispositivo contra las antenas de la red móvil (Nokia NaC).
-- **Detección de SIM Swap**: Alerta inmediata si la tarjeta SIM del conductor ha sido clonada o intercambiada.
-- **Activación de Quality on Demand (QoD)**: Asignación de prioridad de red automática para camiones en rutas críticas o con pérdida de señal.
-- **Análisis Inteligente Continuo**: Uso de Gemini 2.5 Flash para analizar las validaciones de red y emitir dictámenes precisos basados en IA.
-- **Dashboard de Operaciones**: Panel de control en tiempo real para gestores de flota, visualizando incidencias al instante.
+*   🔒 **Verificación Inmutable de Ubicación:** Validación cruzada en tiempo real entre las coordenadas reportadas por la app del conductor, el dispositivo de telemetría del camión, y la posición real validada por la torre de red de la operadora.
+*   📱 **Detección de SIM Swap:** Alerta inmediata y denegación de encendido/autorización si los registros de la Telco indican que la tarjeta SIM del conductor ha sido clonada o intercambiada de dispositivo recientemente.
+*   ⚡ **Priorización Inteligente de Red (QoD):** Activación automatizada de *Quality on Demand* para otorgar ancho de banda crítico y mínima latencia a los sensores logísticos cuando el camión atraviesa zonas grises o rutas largas.
+*   🧠 **Orquestación con IA Generativa:** Un agente cognitivo basado en Gemini 2.5 Flash ingiere toda la biometría de red devuelta por Nokia y evalúa los contextos dinámicos devolviendo veredictos estructurados JSON (`AUTHORIZED`, `DENIED`, `ALERT`, `ARRIVED`).
+*   📊 **Dashboard de Operaciones (Tiempo Real):** Panel de control táctico construido en React para la visualización de la flota activa, alertas de SIM/GPS e historial auditable de decisiones de la IA.
 
 ---
 
-## 🏗️ Arquitectura del Sistema
+## 🏗️ Arquitectura de la Solución
 
-La solución se divide en un backend orquestador (Python/Flask) y un frontend moderno (React).
+El sistema opera bajo un paradigma de agente autónomo híbrido que utiliza **Model Context Protocol (MCP)** para consumir las APIs Telco de forma estandarizada.
 
-```text
-React Frontend (Puerto 3000)
-    │
-    ├─ REST API
-    ▼
-Flask Backend (Puerto 8000)
-    │
-    ├─ MCP Streamable HTTP llamadas
-    ▼
-Nokia Network as Code (vía RapidAPI)  <====>  Google Gemini 2.5 Flash
+```mermaid
+graph TD
+    A[React Dashboard & Driver App] -->|Llamadas REST| B(Flask API Gateway)
+    B -->|Instrucciones MCP| C{VerifyGO AI Agent}
+    C <-->|Peticiones Telco Puras| D[Nokia Network as Code / Open Gateway]
+    C <-->|Evaluación de Contexto| E[Google Gemini 2.5 Flash]
+    D -.->|Cell ID & SIM Auth| F(Antenas Celulares Base)
 ```
 
-### ⚙️ Componentes
+---
 
-**Backend** (`backend/`):
-- `server.py`: API REST Flask, punto de entrada que orquesta los flujos principales.
-- `ai_agent.py`: Cerebro integrador que conecta Nokia NaC MCP y Gemini para la toma de decisiones.
-- `nokia_mcp.py`: Gestión de sesiones MCP (Model Context Protocol) con la API de Nokia NaC.
-- `gemini_agent.py`: Cliente de Gemini 2.5 Flash para la evaluación de estado y generación de respuestas JSON.
-- `route_monitor.py`: Proceso de monitorización en segundo plano (bucle periódico).
-- `incident_manager.py`: Sistema de registro en memoria temporal de incidencias y alertas.
-- `user_manager.py`: Módulo de autenticación y gestión de conductores (login basado en número de teléfono).
+## 🔄 Los 4 Core Flows Telco Activos
 
-**Frontend** (`frontend/`):
-- `/`: Dashboard de operaciones, mapa y control en tiempo real (Vista Admin).
-- `/driver`: Aplicación web responsiva para uso del conductor durante el viaje.
+VerifyGO audita pasiva y activamente los camiones a través de **4 comprobaciones de nivel de telecomunicación** integradas en el ciclo de vida del transporte:
+
+| FASE DE RUTA | TRIGGER LOGÍSTICO | APIS DE RED INVOCADAS (NOKIA) | ROL DE LA INTELIGENCIA ARTIFICIAL |
+| :--- | :--- | :--- | :--- |
+| **1. Validación de Inicio** | Conductor pulsa *Start Journey* | `checkSimSwap` <br> `verifyLocation` <br> `verifyTruckChip` | Verifica si el móvil está donde dice estar, si coincide con el camión físico y si la SIM es legítima antes de encender motor. |
+| **2. Reserva de Ancho de Banda** | Ruta programada > 50 km | `createSession-QoD-V1` | El Agente reserva proactivamente un carril rápido (Quality on Demand) en la red 5G según la distancia del trayecto. |
+| **3. Ghost Monitoring** | Job asíncrono (cada 5 min) | `verifyLocation` <br> `checkRouteDeviation` | Previene desvíos o secuestros del teléfono/camión en plena autopista validando silenciosamente con las antenas locales. |
+| **4. Acuse de Recibo** | Conductor pulsa *I have arrived* | `verifyLocation` <br> `retrieveLocation` | Certifica la entrega en el cliente final **solamente** si el conductor está físicamente dentro del radio geofence de destino a nivel torre celular. |
 
 ---
 
-## 🔄 Los 4 Flujos de Validación (Nokia NaC)
+## 💻 Guía de Despliegue para Evaluación
 
-En su núcleo, VerifyGO ejecuta 4 flujos principales utilizando las APIs de red:
+El proyecto es un Monolito Modular con **Backend** estructurado en Python / Flask y **Frontend** en Node.js / React.
 
-| Flujo | Momento de Ejecución | APIs de Nokia NaC Utilizadas |
-|-------|----------------------|------------------------------|
-| **1. Inicio de Viaje** | El conductor pulsa "Start Journey" | `checkSimSwap` · `verifyLocation` · `getRoamingStatus` |
-| **2. Activación QoD** | Si la ruta supera los 50 km | `createSession-QoD-V1` |
-| **3. Monitorización** | Cada 5 minutos durante el trayecto | `verifyLocation` · `checkSimSwap` |
-| **4. Confirmación** | El conductor pulsa "I have arrived" | `verifyLocation` · `checkSimSwap` · `retrieveLocation` |
+### 1. Requisitos Técnicos
+- **Python 3.10** o superior.
+- **Node.js 18** o superior.
+- Token generativo de Google AI Studio (`GEMINI_API_KEY`).
+- Claves corporativas de Nokia Network as Code (vía Sandbox RapidAPI).
 
-> 🤖 **El papel de la IA:** Gemini 2.5 Flash ingiere los datos JSON provenientes de la red de Nokia tras cada flujo y decide el estado operativo emitiendo uno de cuatro dictámenes: `AUTHORIZED`, `DENIED`, `ALERT` o `ARRIVED`.
-
----
-
-## 📋 Requisitos Previos
-
-Asegúrate de tener instalados los siguientes componentes antes de iniciar:
-
-- **Python** 3.10 o superior (para el Backend)
-- **Node.js** 18 o superior (para el Frontend)
-- Clave API de **Google Gemini** (`GEMINI_API_KEY`)
-- Clave de API de **Nokia Network as Code** a través de RapidAPI (`NOKIA_NAC_API_KEY`)
-
----
-
-## 🚀 Instalación y Configuración
-
-Sigue estos pasos para levantar el proyecto en tu entorno local:
+### 2. Preparación del Entorno
 
 ```bash
 # 1. Clonar el repositorio
-git clone <tu-repositorio-url>
+git clone <url-del-repositorio>
 cd VerifyGo
 
-# 2. Configurar Entorno Virtual Python
+# 2. Levantar el Virtual Environment de Python
 python3 -m venv .venv
-source .venv/bin/activate  # En Windows usar: .venv\Scripts\activate
+source .venv/bin/activate  # Alternativa Windows: .venv\Scripts\activate
 
-# 3. Instalar Dependencias Python
+# 3. Instalar librerías de Agentes, Flask y Red
 pip install -r requirements.txt
 
-# 4. Instalar Dependencias Frontend
+# 4. Compilar UI Management
 cd frontend
 npm install
 cd ..
 
-# 5. Configurar Variables de Entorno
-# Copia el archivo de ejemplo y configura tus claves reales
+# 5. Generar archivo de configuración secreta
 cp .env.example .env
 ```
 
-### 🔐 Variables de Entorno `.env` necesarias:
-Abre el archivo `.env` recién creado y asegúrate de completar tus claves:
-```env
-GEMINI_API_KEY=tu_clave_gemini_aqui
-NOKIA_NAC_API_KEY=tu_clave_rapidapi_aqui
+### 3. Modificación de Variables `.env`
+Edita tu nuevo archivo `.env` en la ruta base con las credenciales entregadas en el Hackathon:
+
+```ini
+GEMINI_API_KEY=tu_token_llm_aqui
+NOKIA_NAC_API_KEY=tu_token_rapid_api_aqui
 NOKIA_NAC_API_HOST=network-as-code.nokia.rapidapi.com
 NOKIA_NAC_MCP_URL=https://mcp-eu.rapidapi.com
 ```
 
 ---
 
-## ▶️ Ejecución de la Aplicación
+## 🚀 Arranque del Sistema
 
-Para lanzar ambos servicios simultáneamente, necesitarás dos terminales.
+Abre dos sesiones de terminal para levantar paralelamente el orquestador backend de IA y el cliente React de visualización.
 
-**Terminal 1 (Backend - Puerto 8000):**
+**Terminal 1: Orquestador AI (Backend) 🐍**
 ```bash
-# Asegúrate de tener el entorno virtual activo
 source .venv/bin/activate
-python3 start.py
+python start.py
 ```
 
-**Terminal 2 (Frontend - Puerto 3000):**
+**Terminal 2: Centro de Mando (Frontend) ⚛️**
 ```bash
 cd frontend
 npm run dev
 ```
 
-**Accesos:**
-- 🖥️ **Panel de Administración:** [http://localhost:3000](http://localhost:3000)
-- 📱 **Aplicación del Conductor:** [http://localhost:3000/driver](http://localhost:3000/driver)
+> **Los nodos estarán disponibles en su máquina local:**
+> 🌐 **Dashboard Operativo:** [http://localhost:3000](http://localhost:3000)
+> 📱 **Terminal del Conductor (Recomendado vista móvil):** [http://localhost:3000/driver](http://localhost:3000/driver)
 
 ---
 
-## 🎮 Guía de Demostración
+## 🎮 Sandboxing y Simulaciones de Amenaza
 
-La aplicación incluye datos de prueba para realizar simulaciones completas.
+La aplicación contiene fixtures generadas para simular un día logístico crítico. Emplea las cuentas subyacentes para testear la resiliencia de VerifyGO.
 
-### 👥 Conductores de Prueba Disponibles
-
-| Teléfono | Conductor | Vehículo | Ruta Asignada |
-|----------|-----------|----------|---------------|
+#### 👥 Identidades Virtuales Habilitadas:
+| Número de Login | Piloto Asignado | Vehículo Tracker | Corredor Logístico |
+| :--- | :--- | :--- | :--- |
 | `+99999991000` | Carlos Rodríguez | TRK-001 | Madrid → Barcelona (621 km) |
 | `+99999991001` | Ana García | TRK-002 | Barcelona → Zaragoza (296 km) |
 
-### 🚨 Simulación de Eventos desde el Dashboard
+#### 🚨 Inyección de Vectores de Ataque (Mediante Panel de Admin)
+Una vez que el viaje logístico inicie, puedes lanzar los siguientes payloads desde la pestaña del entorno simulador en el Dashboard de Operaciones:
 
-Al acceder al panel de administración (Dashboard), puedes forzar las siguientes anomalías:
-
-| Evento de Prueba | Resultado Simulado |
-|------------------|--------------------|
-| **GPS Drift (Spoofing)** | Fuerza que la ubicación del dispositivo difiera de la antena en red. Genera la incidencia `GPS_SPOOFING`. |
-| **SIM Swap** | Emula que el ICCID asociado al número telefónico ha cambiado recientemente. Estado `ALERT`, incidencia `SIM_SWAP`. |
-| **Route Deviation** | Simula que el camión no se encuentra en el trayecto preaprobado → `ROUTE_DEVIATION`. |
-| **Manual QoD** | Fuerza la petición de calidad garantizada de red "Quality on Demand" para un vehículo. |
-
-### 🎬 Paso a Paso para la Demo
-
-1. Abre **[http://localhost:3000/driver](http://localhost:3000/driver)** (preferiblemente simulando vista móvil en el navegador).
-2. Selecciona "Test numbers" e ingresa con un conductor de prueba.
-3. Haz clic en **Start Journey**. Inmediatamente, Nokia NaC verificará posibles problemas de SIM, el estado de Roaming y tu ubicación real.
-4. Abre **[http://localhost:3000](http://localhost:3000)** en otra pestaña para ver al conductor activo.
-5. Utiliza los botones del Dashboard para disparar excepciones (Ej: GPS Spoofing).
-6. Regresa al conductor y haz clic en **I have arrived** para finalizar el trayecto.
+*   🔴 **GPS Spoofing:** Emula un bloqueador de señales en cabina manipulando el GPS reportado. VerifyGO solicitará la triangulación celular verídica y lanzará una excepción arquitectónica si no coinciden.
+*   🔴 **SIM Swap Attack:** Simula un secuestro de la línea de teléfono de un conductor activo. Bloquea temporalmente transacciones logísticas entrantes o la certificación de entrega de los palets.
+*   🔴 **Desviación Enmascarada:** Desvía silenciosamente al camión del corredor seguro designado.
+*   🟢 **Manual QoS Override:** Simula una petición humana de emergencia obligando a las células 4G/5G a dar latencia <2ms al dispositivo de telemetría del camión vía QoD.
 
 ---
 
-## 📁 Estructura del Proyecto
-
-```text
-VerifyGo/
-├── backend/
-│   ├── server.py           # API REST (Punto de entrada general)
-│   ├── ai_agent.py         # Integración y lógica Gemini/Nokia
-│   ├── nokia_mcp.py        # Configuración Sesión MCP NaC
-│   ├── gemini_agent.py     # Lógica pura del modelo Generativo
-│   ├── route_monitor.py    # Job periódico de validación de flota
-│   ├── incident_manager.py # Almacenamiento local de logs/eventos
-│   └── user_manager.py     # Lógica simple de mock login
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Dashboard.tsx    # Vista administrador central
-│   │   │   ├── DriverApp.tsx    # Interfaz conductor (móvil)
-│   │   │   ├── Fleet.tsx        # Sección monitorización flota
-│   │   │   ├── Incidents.tsx    # Visor histórico alertas
-│   │   │   ├── Deliveries.tsx   # Dashboard de misiones
-│   │   │   └── NokiaFlows.tsx   # Visor UI de invocaciones a la API de Nokia
-│   │   ├── lib/
-│   │   │   ├── api.ts           # Cliente HTTP
-│   │   │   └── constants.ts     # Configuraciones por defecto y Mocks
-│   │   └── App.css              # Estilos UI globales
-├── start.py                # Wrapper para arrancar backend
-├── requirements.txt        # Dependencias Pip
-└── README.md               # Documentación actual
-```
-
----
-
-*Desarrollado para el **Open Gateway Hackathon 2026**.*
+<p align="center">
+  <br>
+  Construido con ❤️ para la revolución digital. <br>
+  <strong>Open Gateway Hackathon 2026</strong> por el equipo de ingeniería <strong>VerifyGO</strong>.
+</p>
