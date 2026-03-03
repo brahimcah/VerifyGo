@@ -2,11 +2,13 @@ import asyncio
 import json
 import logging
 import math
+import threading
 
 from dotenv import load_dotenv
 
 from backend.gemini_agent import evaluate
 from backend.nokia_mcp import nokia_nac_session
+from backend import incident_manager
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -70,6 +72,8 @@ async def run_journey_start(truck_id, phone_number, lat_inicio, lon_inicio, rout
                     "3. getRoamingStatus.roaming=true → WARNING, reason: ROAMING_DETECTED\n"
                     "4. Todo OK → AUTHORIZED, reason: ALL_CHECKS_PASSED\n"
                     "Responde SOLO en JSON: {\"status\": \"AUTHORIZED|DENIED|WARNING\", \"reason\": \"...\", "
+                    "\"reason_display\": \"<short, friendly message for the driver in English, "
+                    "e.g.: 'A suspicious SIM swap was detected. Please contact your fleet manager.'>\", "
                     "\"checks\": {\"sim_safe\": bool, \"driver_location_ok\": bool, \"roaming\": bool}}"
                 )
             )
@@ -276,7 +280,22 @@ async def run_confirm_arrival(truck_id, phone_number, lat_actual, lon_actual, la
         return {"status": "ERROR", "reason": f"ARRIVAL_CHECK_ERROR: {e}"}
 
 
-# ── Wrappers síncronos para Streamlit ────────────────────────────────────────
+# ── Flujo 3 — Arranque del bucle de monitorización ────────────────────────────
+
+def start_monitoring(truck_id: str) -> threading.Thread:
+    """
+    Flujo 3 — Arranca el bucle de monitorización en un daemon thread.
+    Orquesta route_monitor, que a su vez usa incident_manager.
+    Llamar después de que run_journey_start haya devuelto AUTHORIZED.
+    """
+    from backend import route_monitor
+    t = threading.Thread(target=route_monitor._run_in_thread, args=(truck_id,), daemon=True)
+    t.start()
+    logger.info(f"[ai_agent] Monitorización iniciada para {truck_id}")
+    return t
+
+
+# ── Wrappers síncronos ────────────────────────────────────────────────────────
 
 def start_journey(truck_id, phone_number, lat_inicio, lon_inicio, route):
     """Flujo 1 — Autoriza el inicio del viaje."""
@@ -287,7 +306,7 @@ def activate_journey_qod(truck_id, phone_number, lat_origen, lon_origen, lat_des
     return asyncio.run(run_qod_activation(truck_id, phone_number, lat_origen, lon_origen, lat_destino, lon_destino))
 
 def check_periodic_location(truck_id, phone_number, current_lat, current_lon, route_waypoints=None):
-    """Flujo 3 — Check periódico de posición y seguridad."""
+    """Flujo 3 (one-shot) — Check puntual de posición y seguridad."""
     return asyncio.run(run_periodic_check(truck_id, phone_number, current_lat, current_lon, route_waypoints))
 
 def confirm_arrival(truck_id, phone_number, lat_actual, lon_actual, lat_destino, lon_destino):

@@ -8,7 +8,6 @@ Endpoints:
   POST /api/delivery/start         → Flujo 1: inicio de viaje
   POST /api/delivery/trigger-event → simular evento (gps_drift, manual_qod, sim_swap)
 """
-import threading
 import asyncio
 import json
 import logging
@@ -22,8 +21,10 @@ load_dotenv()
 from backend.ai_agent import (
     run_journey_start,
     run_qod_activation,
+    start_monitoring,
+    run_confirm_arrival,
 )
-from backend import incident_manager, route_monitor
+from backend import incident_manager, route_monitor, user_manager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -128,6 +129,25 @@ def get_delivery_status():
     })
 
 
+@app.post("/api/auth/login")
+def login():
+    data = request.get_json() or {}
+    phone = data.get("phoneNumber", "").strip()
+    if not phone:
+        return jsonify({"ok": False, "error": "phoneNumber is required"}), 400
+
+    user = user_manager.login(phone)
+    if not user:
+        return jsonify({"ok": False, "error": "Phone number not registered"}), 401
+
+    return jsonify({"ok": True, "user": user})
+
+
+@app.get("/api/incidents")
+def get_incidents():
+    return jsonify(incident_manager.get_all())
+
+
 @app.get("/api/delivery/timeline")
 def get_timeline():
     incidents = incident_manager.get_all()
@@ -203,14 +223,9 @@ def start_delivery():
             if qod_result.get("status") == "QOD_ACTIVATED":
                 _active_truck["is_qod_active"] = True
 
-            # Flujo 3 — arrancar monitorización en hilo background
-            monitor_thread = threading.Thread(
-                target=route_monitor._run_in_thread,
-                args=(truck_id,),
-                daemon=True
-            )
-            monitor_thread.start()
-            logger.info(f"[server] Monitorización iniciada en background para {truck_id}")
+            # Flujo 3 — arrancar monitorización (orquestado por ai_agent)
+            start_monitoring(truck_id)
+            logger.info(f"[server] Flujo 3 delegado a ai_agent para {truck_id}")
 
         return jsonify({
             "success": journey_result.get("status") == "AUTHORIZED",
@@ -276,6 +291,32 @@ def trigger_event():
         return jsonify({"success": False, "error": f"Evento desconocido: {event_id}"}), 400
 
     return jsonify({"success": True, "eventId": event_id})
+
+
+@app.post("/api/delivery/complete")
+def complete_delivery():
+    """Flujo 4 — El conductor confirma llegada al destino."""
+    t = _active_truck
+    try:
+        result = _run_async(
+            run_confirm_arrival(
+                t["truck_id"], t["phone_number"],
+                t["lat"], t["lon"],
+                t["lat_destino"], t["lon_destino"],
+            )
+        )
+        if result.get("status") == "ARRIVED":
+            _active_truck["status"] = "COMPLETED"
+            incident_manager.add_incident(
+                truck_id=t["truck_id"],
+                incident_type="DELIVERY_COMPLETED",
+                description="Entrega confirmada en destino por Nokia NaC.",
+                lat=t["lat_destino"], lon=t["lon_destino"],
+            )
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        logger.error(f"[server] Error en /delivery/complete: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ── Arranque ──────────────────────────────────────────────────────────────────
