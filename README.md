@@ -1,90 +1,157 @@
-# 🚛 FleetSync AI - Centro de Mando de Logística
+# FleetSync AI
 
-**FleetSync AI** es un sistema inteligente de ciberseguridad anti-robo diseñado para flotas de camiones. En un contexto donde la logística enfrenta graves amenazas de seguridad (inhibidores GPS, suplantación de identidad mediante SIM Swap, secuestros de rutas), FleetSync AI emerge como la solución definitiva al fusionar la telemetría tradicional de los camiones con el poder irrefutable de la red de telecomunicaciones. 
+**FleetSync AI** es un sistema de seguridad en tiempo real para flotas de camiones que combina la red de telecomunicaciones de Nokia con IA generativa para verificar conductores, detectar anomalías GPS y garantizar la integridad de las entregas.
 
-Al integrar Inteligencia Artificial generativa (Gemini) y las **APIs CAMARA de Nokia Network as Code (NaC)**, FleetSync AI no solo detecta anomalías, sino que verifica criptográficamente la ubicación física de un conductor directamente con las antenas celulares, disparando protocolos de emergencia de forma autónoma.
+El sistema resuelve un problema real: los ladrones pueden falsear las coordenadas GPS de un camión, pero no pueden falsear la triangulación celular de la red. Nokia Network as Code verifica directamente con las antenas si el conductor está donde dice estar.
 
----
-
-> [!IMPORTANT]
-> **Open Gateway Hackathon 2026**
-> Este proyecto es una Prueba de Concepto (PoC) funcional desarrollada exclusivamente como entrega técnica para el Hackathon. Demuestra la viabilidad técnica y el ROI para el sector logístico de integrar APIs Telco de nueva generación.
+> **Open Gateway Hackathon 2026** — Prueba de Concepto funcional.
 
 ---
 
-## 🏗 Arquitectura del Sistema
+## Arquitectura
 
-El ecosistema de FleetSync consta de tres pilares fundamentales que colaboran en tiempo real:
+```
+React Frontend (puerto 3000)
+    ↓ REST API
+Flask Backend (puerto 8000)
+    ↓ MCP Streamable HTTP
+Nokia Network as Code (RapidAPI)   +   Gemini 2.5 Flash
+```
 
-1.  **Frontend (El Centro de Mando):** Construido en `Streamlit`, proporciona un panel de control avanzado para los operadores logísticos. Permite la introducción simulada de telemetría (ID de camión, teléfono del conductor, latitud y longitud GPS), visualiza de forma profesional los logs brutos de la red (Consola de Red), y muestra de forma inequívoca el dictamen de seguridad final. También presenta un módulo ROI con impacto de negocio.
-2.  **Agente IA (El Cerebro Analítico):** Un script asíncrono en Python (`backend/ai_agent.py`) potenciado por **Google Gemini Models**. Utiliza un estricto *System Prompt* diseñado para ciberseguridad. Su trabajo es ingerir las coordenadas reportadas por el hardware GPS de un camión, invocar a la red Telco, cruzar los datos y emitir un dictamen irrefutable: `SECURE` o `ALERT`.
-3.  **Servidor de Infraestructura MCP:** Un servidor Python (`mcp_server/server.py`) que implementa el **Model Context Protocol (MCP)**. Funciona como el puente seguro entre el Agente de IA y las APIs de telecomunicaciones. Expone herramientas atómicas (tools) a la IA con integración real HTTP a:
-    *   **Nokia NaC - Location Verification API:** Confirma si el móvil del conductor está realmente bajo la cobertura de la antena correspondiente a las coordenadas GPS reportadas por el camión.
-    *   **Nokia NaC - Quality of Service on Demand (QoD):** Priorización de red bajo demanda activada en caso de emergencia.
+**Backend** (`backend/`):
+- `server.py` — API REST Flask, orquesta los 4 flujos
+- `ai_agent.py` — Llama a Nokia NaC MCP + Gemini para cada decisión
+- `nokia_mcp.py` — Sesión MCP con Nokia NaC vía RapidAPI
+- `gemini_agent.py` — Cliente Gemini 2.5 Flash con respuesta JSON
+- `route_monitor.py` — Bucle de monitorización periódica (Flujo 3)
+- `incident_manager.py` — Registro en memoria de incidencias
+- `user_manager.py` — Gestión de conductores (login por teléfono)
 
-## 🔄 Flujo de APIs (Razonamiento de Ciberseguridad)
-
-¿Por qué usamos estas APIs específicas de Nokia Network as Code?
-
-*   **Location Verification (Anti-Spoofing):** Los ladrones modernos utilizan inhibidores GPS (Jammers) o falsean las coordenadas (Spoofing) para desviar camiones sin levantar sospechas. Sin embargo, no pueden falsear la triangulación física celular de la red Telco. FleetSync pide a la API de Nokia que verifique si el móvil del conductor (dispositivo físico) está realmente en las coordenadas que el GPS del camión dice estar. Si la API de Nokia dice `False`, sabemos que el GPS miente: el camión está siendo robado.
-*   **Quality of Service on Demand (QoD):** Si la IA decreta un estado de `ALERT` tras usar la verificación de ubicación o detectar un *SIM Swap*, el sistema invoca inmediatamente la API QoD para asignar ancho de banda prioritario e ininterrumpible al vehículo. Esto garantiza que las cámaras de seguridad 4K del camión puedan transmitir en directo al cuartel de policía o al centro de mando, sorteando cualquier congestión de red en la zona del secuestro.
+**Frontend** (`frontend/`):
+- `/` — Dashboard de operaciones (admin)
+- `/driver` — App móvil del conductor
 
 ---
 
-## ⚙️ Requisitos Previos
+## Los 4 Flujos Nokia NaC
 
-Para levantar este proyecto en tu entorno local, asegúrate de contar con:
-*   Python 3.10 o superior.
-*   Una API Key válida de Google Gemini (`GEMINI_API_KEY`).
-*   Una API Key Bearer válida para el Sandbox de Nokia Network as Code (`NOKIA_API_KEY`).
+| Flujo | Cuándo | Herramientas Nokia NaC |
+|-------|--------|------------------------|
+| **1 — Inicio de viaje** | El conductor pulsa "Start Journey" | `checkSimSwap` · `verifyLocation` · `getRoamingStatus` |
+| **2 — Activación QoD** | Si la ruta supera 50 km | `createSession-QoD-V1` |
+| **3 — Monitorización** | Cada 5 min durante el viaje | `verifyLocation` · `checkSimSwap` |
+| **4 — Confirmación llegada** | El conductor pulsa "I have arrived" | `verifyLocation` · `checkSimSwap` · `retrieveLocation` |
 
-## 🚀 Instrucciones de Instalación
+Gemini 2.5 Flash analiza los resultados de Nokia NaC y emite el dictamen: `AUTHORIZED / DENIED / ALERT / ARRIVED`.
 
-1.  Clona este repositorio o descomprime el código fuente.
-2.  Crea un entorno virtual de Python en la raíz del proyecto para aislar las dependencias:
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # En Windows usa: venv\\Scripts\\activate
-    ```
-3.  Instala las dependencias necesarias:
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  Crea un archivo llamado `.env` en la raíz del proyecto y añade tus credenciales. (Puedes usar un editor de texto o el comando a continuación):
-    ```bash
-    echo "GEMINI_API_KEY=tu_clave_gemini_aqui" > .env
-    echo "NOKIA_API_KEY=tu_clave_nokia_aqui" >> .env
-    ```
-    *(Nota: Si no dispones de una clave de Nokia, el sistema hará una simulación local automática avisando de ello mediante la devolución de logs crudos simulados para no interrumpir la demo).*
+---
 
-## ▶️ Instrucciones de Ejecución
+## Requisitos
 
-Para una demostración visual fluida digna del jurado, ejecuta el simulador interactivo completo ("El Botón Rojo"):
+- Python 3.10+
+- Node.js 18+
+- API Key de Google Gemini (`GEMINI_API_KEY`)
+- API Key de Nokia Network as Code vía RapidAPI (`NOKIA_NAC_API_KEY`, `NOKIA_NAC_API_HOST`, `NOKIA_NAC_MCP_URL`)
+
+---
+
+## Instalación
 
 ```bash
-# ¡Asegúrate de tener el entorno virtual activo!
-python start.py
+# 1. Entorno virtual Python
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2. Dependencias Python
+pip install -r requirements.txt
+
+# 3. Dependencias frontend
+cd frontend && npm install && cd ..
+
+# 4. Variables de entorno
+cp .env.example .env   # edita con tus claves
 ```
 
-Este comando orquestador se encarga de:
-1.  Preparar el contexto local del servidor MCP en segundo plano.
-2.  Levantar e inicializar automáticamente el Dashboard de `Streamlit` en tu navegador por defecto (usualmente `http://localhost:8501`).
+`.env` necesario:
+```
+GEMINI_API_KEY=...
+NOKIA_NAC_API_KEY=...
+NOKIA_NAC_API_HOST=network-as-code.nokia.rapidapi.com
+NOKIA_NAC_MCP_URL=https://mcp-eu.rapidapi.com
+```
 
-### Simulación Rápida (CLI)
+---
 
-Si deseas probar el razonamiento básico en consola (Escenarios de Normalidad y Ataque):
+## Ejecución
+
+**Backend** (puerto 8000):
 ```bash
-python simulador.py
+python3 start.py
 ```
 
-### Simulador Coreográfico (Para el Pitch al Jurado)
-
-Durante los 5 minutos del pitch, utiliza el script orquestador CLI interactivo, diseñado específicamente para inyectar automáticamente los datos paso a paso mientras explicas la arquitectura.
+**Frontend** (puerto 3000), en otra terminal:
 ```bash
-python demo_runner.py
+cd frontend && npm run dev
 ```
 
-Al iniciarlo, verás el siguiente menú de escenarios simulados en vivo (donde la IA y el entorno evaluan cada fase temporal con retrasos `sleep` programados de 2 segundos para dar dramatismo a las consolas):
-1. **[1] Ejecutar Escenario: Viaje Perfecto (Todo OK):** Autorización nacional, comprobación QoD y llegada final conformada al destino logístico.
-2. **[2] Ejecutar Escenario: Ataque Spoofing (Conductor no está en el camión):** Simulación de un inhibidor físico GPS en el vehículo o robo mediante sustracción del trailer; detectado instantes después por Location Verification vía la API de Nokia y negado el inicio de ruta.
-3. **[3] Ejecutar Escenario: Desvío de Ruta (Incidencia en vivo):** Simulación del desvío en una zona muerta de GPS disparando el protocolo de emergencia QoD streaming.
+Abre:
+- **Dashboard operaciones:** http://localhost:3000
+- **App conductor:** http://localhost:3000/driver
+
+---
+
+## Demo
+
+### Conductores de prueba
+
+| Teléfono | Conductor | Camión | Ruta |
+|----------|-----------|--------|------|
+| `+99999991000` | Carlos Rodríguez | TRK-001 | Madrid → Barcelona (621 km) |
+| `+99999991001` | Ana García | TRK-002 | Barcelona → Zaragoza (296 km) |
+
+### Eventos simulables desde el dashboard
+
+| Evento | Efecto |
+|--------|--------|
+| **GPS Drift** | Simula spoofing GPS → incidencia `GPS_SPOOFING` |
+| **SIM Swap** | Simula cambio de SIM → incidencia `SIM_SWAP`, estado ALERT |
+| **Route Deviation** | Simula desvío de ruta → incidencia `ROUTE_DEVIATION` |
+| **Manual QoD** | Activa QoD manualmente desde el panel |
+
+### Flujo completo de demo
+
+1. Abre http://localhost:3000/driver en móvil o ventana estrecha
+2. Introduce el teléfono de prueba (o pulsa en "Test numbers")
+3. Pulsa **Start Journey** — Nokia NaC verifica SIM, ubicación y roaming
+4. Durante el viaje, usa el dashboard para disparar eventos
+5. Pulsa **I have arrived** — Nokia NaC confirma llegada en destino
+
+---
+
+## Estructura del proyecto
+
+```
+VerifyGo/
+├── backend/
+│   ├── server.py           # API REST Flask
+│   ├── ai_agent.py         # Orquestador Nokia NaC + Gemini
+│   ├── nokia_mcp.py        # Sesión MCP Nokia NaC
+│   ├── gemini_agent.py     # Cliente Gemini 2.5 Flash
+│   ├── route_monitor.py    # Monitorización periódica
+│   ├── incident_manager.py # Registro de incidencias
+│   └── user_manager.py     # Gestión de conductores
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── Dashboard.tsx    # Vista principal operaciones
+│       │   ├── Fleet.tsx        # Gestión de flota
+│       │   ├── Incidents.tsx    # Registro de incidencias
+│       │   ├── Deliveries.tsx   # Seguimiento de entregas
+│       │   ├── NokiaFlows.tsx   # Documentación de flujos
+│       │   └── DriverApp.tsx    # App móvil del conductor
+│       └── lib/
+│           ├── api.ts           # Cliente REST
+│           └── constants.ts     # Datos demo y configuración
+├── start.py                # Arranca el backend
+└── requirements.txt
+```
